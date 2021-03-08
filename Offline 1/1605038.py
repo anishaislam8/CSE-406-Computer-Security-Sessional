@@ -3,6 +3,10 @@ import copy
 import numpy as np
 import time
 from collections import deque
+import tkinter as tk
+from tkinter import filedialog
+import base64 
+import os
 
 # SBox and InvSBox
 
@@ -43,6 +47,22 @@ InvSbox = (
     0xA0, 0xE0, 0x3B, 0x4D, 0xAE, 0x2A, 0xF5, 0xB0, 0xC8, 0xEB, 0xBB, 0x3C, 0x83, 0x53, 0x99, 0x61,
     0x17, 0x2B, 0x04, 0x7E, 0xBA, 0x77, 0xD6, 0x26, 0xE1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0C, 0x7D,
 )
+
+# Mixer and InvMixer
+
+Mixer = [
+    [BitVector(hexstring="02"), BitVector(hexstring="03"), BitVector(hexstring="01"), BitVector(hexstring="01")],
+    [BitVector(hexstring="01"), BitVector(hexstring="02"), BitVector(hexstring="03"), BitVector(hexstring="01")],
+    [BitVector(hexstring="01"), BitVector(hexstring="01"), BitVector(hexstring="02"), BitVector(hexstring="03")],
+    [BitVector(hexstring="03"), BitVector(hexstring="01"), BitVector(hexstring="01"), BitVector(hexstring="02")]
+]
+
+InvMixer = [
+    [BitVector(hexstring="0E"), BitVector(hexstring="0B"), BitVector(hexstring="0D"), BitVector(hexstring="09")],
+    [BitVector(hexstring="09"), BitVector(hexstring="0E"), BitVector(hexstring="0B"), BitVector(hexstring="0D")],
+    [BitVector(hexstring="0D"), BitVector(hexstring="09"), BitVector(hexstring="0E"), BitVector(hexstring="0B")],
+    [BitVector(hexstring="0B"), BitVector(hexstring="0D"), BitVector(hexstring="09"), BitVector(hexstring="0E")]
+]
 
 # calculate round constants for all 10 rounds
 
@@ -187,17 +207,39 @@ time1 = time.time()
 key_scheduling_time = time1-time0
 
 
-# input text
+# input text or image
+inputType = input("Enter type 1) Image 2) Text : ")
 
-text = input("Enter text : ")
+if inputType == "2":
+    text = input("Enter text : ")
+elif inputType == "1" :
+    root = tk.Tk()
+    root.withdraw()
+
+    file_path = filedialog.askopenfilename()
+    filename, file_extension = os.path.splitext(file_path)
+
+    # open our image file in read binary mode
+    with open(file_path, "rb") as image2string:
+        # reads the image and encodes it
+        byte_data = base64.b64encode(image2string.read())
+    
+    text = byte_data.decode('utf-8') 
+
+
+
+paddingLength = 0
+
 blocks = []
 if (len(text) < 16) :
+    paddingLength = 16 - len(text)
     text = text.ljust(16,'0')
     blocks.append(text)
 elif (len(text) > 16) :
     for i in range(0,len(text),16) :
         blocks.append(text[i:i+16])
     if(len(blocks[len(blocks) - 1]) < 16) : 
+        paddingLength = 16 - len(blocks[len(blocks) - 1])
         blocks[len(blocks) - 1] = blocks[len(blocks) - 1].ljust(16,'0')
 else :
     blocks.append(text)
@@ -208,6 +250,7 @@ else :
 time0 = time.time()
 
 cipherText = []
+
 for n in range(len(blocks)) :
     
     textInHex = blocks[n].encode("utf-8").hex()
@@ -260,7 +303,6 @@ for n in range(len(blocks)) :
 
         # mix column
         if m != 10 :
-            fixed_matrix = np.array([['02', '03', '01', '01'], ['01', '02', '03', '01'], ['01', '01', '02', '03'], ['03', '01', '01', '02']])
             another_temp = []
 
             for i in range(16) :
@@ -270,7 +312,7 @@ for n in range(len(blocks)) :
             for i in range(4) :
                 for j in range(4) :
                     for k in range(4) :
-                        bv1 = BitVector(hexstring=fixed_matrix[i][k])
+                        bv1 = Mixer[i][k]
                         bv2 = BitVector(hexstring=stateMatrix[k][j])
                         a = bv1.gf_multiply_modular(bv2, AES_modulus, 8)
                         bv3 = BitVector(hexstring=another_temp[i][j])
@@ -298,7 +340,6 @@ for n in range(len(blocks)) :
 
 time1 = time.time()
 encryption_time = time1-time0
-
 
 
 # Decryption
@@ -368,7 +409,6 @@ for m in range(len(cipherTextBlock)) :
 
         # inverse mix column
         if m != 10 :
-            fixed_matrix = np.array([['0E', '0B', '0D', '09'], ['09', '0E', '0B', '0D'], ['0D', '09', '0E', '0B'], ['0B', '0D', '09', '0E']])
             another_temp = []
 
             for i in range(16) :
@@ -378,7 +418,7 @@ for m in range(len(cipherTextBlock)) :
             for i in range(4) :
                 for j in range(4) :
                     for k in range(4) :
-                        bv1 = BitVector(hexstring=fixed_matrix[i][k])
+                        bv1 = InvMixer[i][k]
                         bv2 = BitVector(hexstring=stateMatrix[k][j])
                         a = bv1.gf_multiply_modular(bv2, AES_modulus, 8)
                         bv3 = BitVector(hexstring=another_temp[i][j])
@@ -404,11 +444,31 @@ decryption_time = time1-time0
 s = ''
 s = s.join(originalText)
 finalText = bytearray.fromhex(s).decode()
+finalLength = len(finalText) - paddingLength
+decipheredText = finalText[:finalLength]
 
-print("Original text : ", text)
-print("Deciphered text : ", finalText )
-print("Key scheduling time : ", key_scheduling_time)
-print("Encryption Time : ", encryption_time)
-print("Decryption time : ", decryption_time)
+if inputType == "1" :
+
+    b = decipheredText.encode('utf-8')
+
+    with open('encode.bin', "wb") as file: 
+        file.write(b)
+    file = open('encode.bin', 'rb') 
+    byte = file.read() 
+    file.close() 
+  
+    decodeit = open("deciphered" + file_extension, 'wb') 
+    decodeit.write(base64.b64decode((byte))) 
+    decodeit.close() 
+
+    print("Key scheduling time : ", key_scheduling_time)
+    print("Encryption Time : ", encryption_time)
+    print("Decryption time : ", decryption_time)
+elif inputType == "2" :
+    print("Original text : ", text)
+    print("Deciphered text : ", decipheredText )
+    print("Key scheduling time : ", key_scheduling_time)
+    print("Encryption Time : ", encryption_time)
+    print("Decryption time : ", decryption_time)
 
 
