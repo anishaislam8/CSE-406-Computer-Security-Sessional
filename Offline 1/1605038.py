@@ -98,11 +98,12 @@ for i in range(16) :
            
             a = BitVector(hexstring = changeVal(i) + changeVal(j))
             
-            multi_inverse = a.gf_MI(AES_modulus, 8)
-
+            multi_inverse = a.gf_MI(AES_modulus, 8) # b
+            
+            # s = b xor (b << 1) xor (b << 2) xor (b << 3) xor (b << 4) xor 63(base_16)
             s = []
             for k in range(len(multi_inverse)):
-                s.append(multi_inverse[k])
+                s.append(multi_inverse[k]) # we have to shift this to the left
             for l in range(1,5) :
                 d = deque(s)
                 d.rotate(-l) # left shift
@@ -128,9 +129,9 @@ for i in range(16*16):
 InvSbox = np.array(InvSbox, dtype=object).reshape((16,16))
 for i in range(16) :
     for j in range(16):
-        s = SboxMat[i][j]
-        temp = changeVal(i)+changeVal(j)
-        InvSbox[hexToInt (s[0])][hexToInt (s[1])] = temp
+        s = SboxMat[i][j] # 63
+        temp = changeVal(i)+changeVal(j) # 0-> 0, 11 -> b, temp = 0b
+        InvSbox[hexToInt (s[0])][hexToInt (s[1])] = temp # InvSbox[6][3] = 00
 InvSbox = InvSbox.flatten()
 
 print("InvSbox : ")          
@@ -161,7 +162,8 @@ round_constants.append(["01", "00", "00", "00"])
 rc = []
 rc.append("01")
 
-
+# i > 1 --> (2 * rc_prev) if (rc_prev < hex('80'))
+# i > 1 --> ((2 * rc_prev) xor (11B)) if (rc_prev >= hex('80'))
 
 for i in range(1,10) :
     bv1 = BitVector(hexstring=rc[i-1])
@@ -177,7 +179,7 @@ for i in range(1,10) :
         result = a ^ xor
         val = result.get_bitvector_in_hex()
 
-    rc.append(val)
+    rc.append(val) # what's the point of keepin rc ? for using as rc_prev
     round_constants.append([val, "00", "00", "00"])
 
 # *************************************************************************
@@ -193,7 +195,8 @@ elif (len(key) > 16) :
     key = key[0:16]
 
 # convert the ascii key into hex value
-
+# each character is an 8 bit value consisting of two hex characters, A -> 41
+# ['41', '6e', '69', '73', '68', '61', '20', '49', '73', '6c', '61', '6d', '20', '69', '73', '20']
 keyInHex = key.encode("utf-8").hex()
 twoBitHex = []
 for i in range(0,len(keyInHex),2) :
@@ -201,6 +204,7 @@ for i in range(0,len(keyInHex),2) :
 
 # create the first four words
 
+# [['41', '6e', '69', '73'], ['68', '61', '20', '49'], ['73', '6c', '61', '6d'], ['20', '69', '73', '20']]
 words = []
 for i in range(0, len(twoBitHex),4):
     words.append(twoBitHex[i:i+4])
@@ -211,6 +215,10 @@ for i in range(0, len(twoBitHex),4):
 
 
 # function g
+
+# • circular byte left shift of w[3]: (20; 46; 75; 67)
+# • Byte Substitution (S-Box): (B7; 5A; 9D; 85)
+# • Adding round constant (01; 00; 00; 00) gives: g(w[3]) = (B6; 5A; 9D; 85)
 
 def nextWord (word_index) :
     # next word
@@ -244,14 +252,14 @@ def gSteps (word, g_index, round_index) :
         s = BitVector(intVal=s, size=8)
         g_word.append(s.get_bitvector_in_hex())
 
-    g.append(g_word)
+    g.append(g_word) # (B7; 5A; 9D; 85)
     
     # adding round constant
     int_g = int(g[g_index][0], 16)
     int_rc = int(round_constants[round_index][0], 16)
     summation = int_g ^ int_rc
     g[g_index][0] = BitVector(intVal=summation, size=8) 
-    g[g_index][0] = g[g_index][0].get_bitvector_in_hex()
+    g[g_index][0] = g[g_index][0].get_bitvector_in_hex() # (B6; 5A; 9D; 85)
 
 
 
